@@ -40,7 +40,7 @@
                     (let [[start end] (sort [x x'])]
                       (->> (range start (inc end))
                            (reduce (fn [m'' x'']
-                                     (update-in m'' [y x''] inc))
+                                     (update-in m'' [(dec y) (dec x'')] inc))
                                    m'))))
                   m
                   coordinates))
@@ -49,7 +49,7 @@
                     (let [[start end] (sort [y y'])]
                       (->> (range start (inc end))
                            (reduce (fn [m'' y'']
-                                     (update-in m'' [y'' x] inc))
+                                     (update-in m'' [(dec y'') (dec x)] inc))
                                    m'))))
                   m
                   coordinates))
@@ -61,8 +61,8 @@
                                       (recur (conj coords [((if (> x' x) inc dec) x)
                                                            ((if (> y' y) inc dec) y)]))))
                                   (list [x y]))]
-                      (reduce (fn [m coord]
-                                (update-in m coord inc))
+                      (reduce (fn [m [x y]]
+                                (update-in m [(dec y) (dec x)] inc))
                               m'
                               coords)))
                   m
@@ -70,17 +70,18 @@
 
   ;; example: 5
   ;; part1: 5442
-  (let [input example-input
+  ;; part2: 19571
+  (let [input puzzle-input
           {:keys [horizontal vertical diagonal]} (group-by ->kind input)
         [max-x max-y] (reduce (fn [[max-x max-y] [[x y] [x' y']]]
                                 [(max max-x x x')
                                  (max max-y y y')])
                               [0 0]
                               input)]
-    (->> (-> (vec (repeat (inc max-y) (vec (repeat (inc max-x) 0))))
+    (->> (-> (vec (repeat max-y (vec (repeat max-x 0))))
              (apply-horizontal horizontal)
              (apply-vertical vertical)
-             #_(apply-diagonal diagonal)
+             (apply-diagonal diagonal)
              #_(doto render))
          (flatten)
          (filter #(> % 1))

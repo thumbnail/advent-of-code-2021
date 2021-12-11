@@ -26,10 +26,11 @@
    (<= minY y)
    (<= minX x)))
 
-(defn coordinates [{:keys [minX maxX minY maxY]}]
-  (for [y (range minY (inc maxY))
-        x (range minX (inc maxX))]
-    {:x x :y y}))
+(defn coordinates [matrix]
+  (let [{:keys [minX maxX minY maxY]} (bounds matrix)]
+   (for [y (range minY (inc maxY))
+         x (range minX (inc maxX))]
+     {:x x :y y})))
 
 ;; There's probably a proper method to get all neighbours of a coord, but this is pretty effective
 (defn neighbours [{:keys [x y]} bounds]
@@ -43,57 +44,53 @@
         {:x (dec x) :y (dec y)}]
        (filter (partial in-bounds? bounds))))
 
-(defn inc-things
-  ([m flashed coords]
-   (reduce (fn [{:keys [m flashed] :as memo} {:keys [x y] :as coord}]
+(defn step
+  ([matrix coords]
+   (step matrix coords #{}))
+  ([matrix coords flashed]
+   (reduce (fn [{:keys [matrix flashed] :as memo} {:keys [x y] :as coord}]
              (cond
-               (and (= 9 (get-in m [y x]))
+               (and (= 9 (get-in matrix [y x]))
                    (not (flashed coord)))
-               (inc-things (assoc-in m [y x] 0)
-                           (conj flashed coord)
-                           (neighbours coord (bounds m)))
+               (step (assoc-in matrix [y x] 0)
+                     (neighbours coord (bounds matrix))
+                     (conj flashed coord))
 
                (not (flashed coord))
-               (update-in memo [:m y x] inc)
+               (update-in memo [:matrix y x] inc)
 
                :else memo))
            {:flashed flashed
-            :m       m}
+            :matrix  matrix}
            coords)))
 
-(defn solve-1 [in]
-  (let [m (parse-input in)
-        bounds (bounds m)
-        coords (coordinates bounds)]
+(defn perform-steps [matrix stop-pred]
+  (let [coords (coordinates matrix)]
     (loop [round 0
-           m m
+           matrix matrix
            flashes 0]
-      (if (= 100 round)
-        flashes
-        (let [x (inc-things m #{} coords)]
-         (recur (inc round)
-                (:m x)
-                (+ flashes (count (:flashed x)))))))))
+      (if (stop-pred {:round round :matrix matrix})
+        {:flashes flashes
+         :round round
+         :matrix matrix}
+        (let [{:keys [matrix flashed]} (step matrix coords)]
+          (recur (inc round) matrix (+ flashes (count flashed))))))))
+
+(defn solve-1 [in]
+  (-> (parse-input in)
+      (perform-steps (comp #{100} :round))
+      (:flashes)))
 
 (defn solve-2 [in]
-  (let [m (parse-input in)
-        bounds (bounds m)
-        coords (coordinates bounds)]
-    (loop [round 0
-           m m
-           flashes 0]
-      (if (= #{0} (set (flatten m)))
-        round
-        (let [x (inc-things m #{} coords)]
-         (recur (inc round)
-                (:m x)
-                (+ flashes (count (:flashed x)))))))))
+  (-> (parse-input in)
+      (perform-steps (comp #{#{0}} set flatten :matrix))
+      (:round)))
 
 (comment
  (parse-input example-input)
 
  (def m (parse-input example-input))
- ((neighbours {:x 1, :y 1} (bounds m)))
+ (neighbours {:x 1, :y 1} (bounds m))
 
  ;; 1675
  (solve-1 puzzle-input)

@@ -1,5 +1,6 @@
 (ns day12
-  (:require [clojure.string :as str]))
+  (:require [clojure.string :as str]
+            [medley.core :refer [map-vals]]))
 
 (def example-input "start-A\nstart-b\nA-c\nA-b\nb-d\nA-end\nb-end")
 (def example-input2 "dc-end\nHN-start\nstart-kj\ndc-start\ndc-HN\nLN-dc\nHN-end\nkj-sa\nkj-HN\nkj-dc")
@@ -8,63 +9,53 @@
 
 (defn parse-input [in]
   (->> (str/split-lines in)
-       (reduce (fn [memo desc]
-                 (let [[id child] (str/split desc #"-")]
-                  (update memo id (fnil conj #{}) child)))
-               {})))
-
-(defn ->moves [in]
-  (reduce (fn [m [from tos]]
-            (into m
-                  cat
-                  (for [to tos]
-                    [[from to]
-                     [to from]])))
-          #{}
-          in))
+       (map #(str/split % #"-"))
+       (mapcat (fn [[a b]]
+                 [{a [b]}
+                  {b [a]}]))
+       (apply merge-with concat)
+       (map-vals (comp vec #(remove #{"start"} %)))))
 
 (defn big-cave? [cave]
   (= cave (str/upper-case cave)))
 
-(defn compute-paths [legal-move? paths]
-  (let [grouped-paths (group-by first paths)]
-   (loop [cursor "start"
-          trail []
-          history #{}]
-     (let [trail (conj trail cursor)]
-      (if (= "end" cursor)
-        (recur "start" [] (conj history trail))
-        (let [moves (->> (get grouped-paths cursor)
-                         ;; remove illegal moves
-                         (filter (partial legal-move? trail))
-                         ;; remove moves we already tried
-                         (remove (fn [[from to]]
-                                   (contains? history (conj trail to)))))]
-          (cond
-            (and (= 1 (count trail))
-                 (empty? moves))
-            ;; return recorded paths that ended
-            (filter (comp #{"end"} last) history)
+(defn compute-paths [legal-move? grouped-paths]
+  (loop [cursor "start"
+         trail []
+         history #{}]
+    (let [trail (conj trail cursor)]
+     (if (= "end" cursor)
+       (recur "start" [] (conj history trail))
+       (let [moves (->> (get grouped-paths cursor)
+                        ;; remove illegal moves
+                        (filter (partial legal-move? trail))
+                        ;; remove moves we already tried
+                        (remove (fn [to]
+                                  (contains? history (conj trail to)))))]
+         (cond
+           (and (= 1 (count trail))
+                (empty? moves))
+           ;; return recorded paths that ended
+           (filter (comp #{"end"} last) history)
 
-            (empty? moves)
-            (recur "start" [] (conj history trail))
+           (empty? moves)
+           (recur "start" [] (conj history trail))
 
-            :else
-            (let [[[_from to] & other-moves] moves] ;; take first legal move
-              (recur to trail history)))))))))
+           :else
+           (let [[to & other-moves] moves] ;; take first legal move
+             (recur to trail history))))))))
 
-(defn legal-move-1? [trail [_from to]]
+(defn legal-move-1? [trail to]
   (cond
     (big-cave? to) true
     :else (not-any? #{to} trail)))
 
 (defn solve-1 [input]
   (->> (parse-input input)
-       (->moves)
        (compute-paths legal-move-1?)
        (count)))
 
-(defn legal-move-2? [trail [_from to]]
+(defn legal-move-2? [trail to]
   (cond
     (big-cave? to)
     true
@@ -80,7 +71,6 @@
 
 (defn solve-2 [input]
   (->> (parse-input input)
-       (->moves)
        (compute-paths legal-move-2?)
        (count)))
 
@@ -89,9 +79,9 @@
  (parse-input example-input)
 
  ; 5157
- (solve-1 puzzle-input)
+ (time (solve-1 puzzle-input))
  ; 144309
- (solve-2 puzzle-input)
+ (time (solve-2 puzzle-input))
 
  ; 36
  (solve-2 example-input))

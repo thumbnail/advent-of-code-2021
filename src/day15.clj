@@ -31,14 +31,12 @@
         {:x x :y (inc y)}]
        (filter (partial in-bounds? bounds))))
 
-(defn heuristic [{x1 :x y1 :y} {x2 :x y2 :y}]
-  (+ (Math/abs ^int (- x2 x1)) (Math/abs ^int (- y2 y1))))
-
-(defn a* [start goal graph]
+(defn dijkstra [start goal graph]
   (loop [frontier    (pm/priority-map start 0)
          came-from   {start nil}
          cost-so-far {start 0}]
-    (let [current (ffirst frontier)]
+    (let [current (ffirst frontier)
+          bounds (bounds graph)]
      (if (= current goal)
        (take-while some? (iterate came-from goal))
        (when (some? current)
@@ -49,9 +47,9 @@
                                  came-from    (get m :came-from)
                                  x            (get next :x)
                                  y            (get next :y)
-                                 new-v     (get-in graph [y x])
-                                 new-cost  (+ (get cost-so-far current) new-v)
-                                 priority  (+ new-cost (heuristic next goal))]
+                                 new-v        ^int (get-in graph [y x])
+                                 new-cost     (+ ^int (get cost-so-far current) new-v)
+                                 priority     new-cost]
                              (if (or (not (contains? cost-so-far next))
                                      (< new-cost (get cost-so-far next)))
                                {:frontier    (assoc frontier next priority)
@@ -61,16 +59,14 @@
                          {:frontier    frontier
                           :cost-so-far cost-so-far
                           :came-from   came-from}
-                         (surrounding current (bounds graph)))]
+                         (surrounding current bounds))]
            (recur (:frontier r)
                   (:came-from r)
                   (:cost-so-far r))))))))
 
 (defn solve* [m]
   (let [{:keys [maxX maxY]} (bounds m)]
-    (->> (a* {:x 0, :y 0}
-             {:x maxX :y maxY}
-             m)
+    (->> (dijkstra {:x 0, :y 0} {:x maxX :y maxY} m)
          (mapv (fn [{:keys [x y]}] (get-in m [y x])))
          (butlast) ;; skip first one
          (apply +))))

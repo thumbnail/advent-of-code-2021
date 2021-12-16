@@ -29,71 +29,73 @@
 (defn bits->int [x]
   (Long/parseLong (apply str x) 2))
 
+(defn parse-literal [bits]
+  (loop [value []
+         [[flag & nibble] & bits] (partition-all 5 bits)]
+    (case flag
+      0 [(bits->int (into value nibble))
+         (flatten bits)]
+      1 (recur (into value nibble) bits))))
+
+(declare read-packet)
+
+(defn parse-total-length-packet [bits]
+  (let [total-length (bits->int (take 15 bits))
+        [bits rest] (split-at total-length (drop 15 bits))]
+    (loop [bits bits
+           vs   []]
+      (if (empty? bits)
+        [vs rest]
+        (let [[v rest] (read-packet bits)]
+          (recur rest (conj vs v)))))))
+
+(defn parse-packet-count-packet [bits]
+  (let [packet-count (bits->int (take 11 bits))]
+    (loop [bits (drop 11 bits)
+           vs   []
+           i    0]
+      (if (= i packet-count)
+        [vs bits]
+        (let [[v rest] (read-packet bits)]
+          (recur rest
+                 (conj vs v)
+                 (inc i)))))))
+
 (defn read-packet
   [bits]
   (let [[version bits] (split-at 3 bits)
         [id bits]      (split-at 3 bits)
-        version (bits->int version)
-        id (bits->int id)]
-   (case id
-     4 (loop [value []
-              [[flag & nibble] & bits] (partition-all 5 bits)]
-         (case flag
-           0 [{:id id
-               :version version
-               :literal (bits->int (into value nibble))}
-              (flatten bits)]
-           1 (recur (into value nibble) bits)))
+        id             (bits->int id)
+        [content rest] (case id
+                         4 (parse-literal bits)
+                         (let [[operator & bits] bits]
+                           (case operator
+                             0 (parse-total-length-packet bits)
+                             1 (parse-packet-count-packet bits))))]
+    [{:id      id
+      :version (bits->int version)
+      :content content}
+     rest]))
 
-     (let [[operator & bits] bits]
-       (cond
-         (= 0 operator)
-         (let [total-length (bits->int (take 15 bits))
-               [bits rest] (split-at total-length (drop 15 bits))]
-           (loop [bits bits
-                  vs   []]
-             (if (empty? bits)
-               [{:id      id
-                 :version version
-                 :literal vs}
-                rest]
-               (let [[v rest] (read-packet bits)]
-                 (recur rest (conj vs v))))))
-
-         (= 1 operator)
-         (let [packet-count (bits->int (take 11 bits))]
-           (loop [bits (drop 11 bits)
-                  vs   []
-                  i    0]
-             (if (= i packet-count)
-               [{:id      id
-                 :version version
-                 :literal vs}
-                bits]
-               (let [[v rest] (read-packet bits)]
-                 (recur rest
-                        (conj vs v)
-                        (inc i)))))))))))
-
-(defn sum-versions [{:keys [id literal version]}]
+(defn sum-versions [{:keys [id content version]}]
   (case id
     4 version
-    (apply + version (map sum-versions literal))))
+    (apply + version (map sum-versions content))))
 
 (defn gt-than [x y] (if (> x y) 1 0))
 (defn lt-than [x y] (if (< x y) 1 0))
 (defn eql [x y] (if (= x y) 1 0))
 
-(defn evaluate [{:keys [id literal]}]
+(defn evaluate [{:keys [id content]}]
   (case id
-    4 literal
-    0 (->> literal (map evaluate) (reduce +))
-    1 (->> literal (map evaluate) (reduce *))
-    2 (->> literal (map evaluate) (reduce min))
-    3 (->> literal (map evaluate) (reduce max))
-    5 (->> literal (map evaluate) (reduce gt-than))
-    6 (->> literal (map evaluate) (reduce lt-than))
-    7 (->> literal (map evaluate) (reduce eql))))
+    4 content
+    0 (->> content (map evaluate) (reduce +))
+    1 (->> content (map evaluate) (reduce *))
+    2 (->> content (map evaluate) (reduce min))
+    3 (->> content (map evaluate) (reduce max))
+    5 (->> content (map evaluate) (reduce gt-than))
+    6 (->> content (map evaluate) (reduce lt-than))
+    7 (->> content (map evaluate) (reduce eql))))
 
 (defn solve* [in]
   (first (read-packet (parse in))))
